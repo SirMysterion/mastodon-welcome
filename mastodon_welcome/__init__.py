@@ -39,38 +39,46 @@ if __name__ == '__main__':
     with open(args.config, "rb") as toml_file:
         config = tomllib.load(toml_file)
 
+    print(f"Connecting to {config['mastodon']['base_url']}...")
+
     mastodon = Mastodon(
         access_token = config['mastodon']['access_token'],
         api_base_url = config['mastodon']['base_url']
     )
 
     visibility = config['mastodon'].get('visibility', 'unlisted')
+    print(f"Visibility mode: {visibility}")
 
     connection = sqlite3.connect(config['database']['sqlite_path'])
     cursor = connection.cursor()
     
-    # are our tables defined?
     fresh_database = not check_db_exists(cursor) 
     if fresh_database:
-        print("Database was freshly created - we'll set all pre-existing users as of now to 'welcomed' to avoid spamming everyone on the server.")
+        print("Database initialized - marking existing users as welcomed")
 
+    print("Fetching accounts...")
     all_accounts = mastodon.admin_accounts(remote=False, status='active', limit=ACCOUNT_FETCH_LIMIT)
+    
+    accounts_total = len(all_accounts)
+    users_welcomed = 0
+    users_added = 0
+
     for account in all_accounts:
-        # despite status='active', we still get zombie users from the API
         if not (account.confirmed and account.approved) or account.disabled or account.suspended or account.silenced:
             continue
         
-        # does our welcome bot know about this user?
         if not user_exists(cursor, account.id):
             create_user(cursor, account.id, account.username)
-            connection.commit()      
+            connection.commit()
+            users_added += 1
         
-        # have we welcomed them yet?
         if fresh_database:
             set_user_welcomed(cursor, account.id)
             connection.commit()
         
         elif not user_welcomed(cursor, account.id):
+            print(f"Welcoming @{account.username}...")
+            
             result_id = None
             for message in config['messages']:
                 content_warning = message['content_warning'] if 'content_warning' in message else None
@@ -79,3 +87,10 @@ if __name__ == '__main__':
             
             set_user_welcomed(cursor, account.id)
             connection.commit()
+            users_welcomed += 1
+            print(f"  ✓ Welcome sent to @{account.username}")
+
+    print(f"\nSummary:")
+    print(f"  Accounts processed: {accounts_total}")
+    print(f"  New users added: {users_added}")
+    print(f"  Welcome messages sent: {users_welcomed}")
