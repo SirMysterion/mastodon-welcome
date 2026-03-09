@@ -1,0 +1,8 @@
+services:
+  mastodon-welcome:
+    image: sirmysterion/mastodon-welcome
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - ./data:/data
+    command: ["--config", "/app/config.toml"]
+    restart: unless-stopped

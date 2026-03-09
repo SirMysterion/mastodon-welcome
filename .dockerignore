@@ -1,0 +1,9 @@
+__pycache__
+.git
+.gitignore
+.venv
+*.pyc
+*.secret
+*.db
+config.toml
+.env
